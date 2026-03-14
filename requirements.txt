@@ -1,0 +1,11 @@
+# Scrapy - Web scraping framework
+Scrapy>=2.11.0
+
+# Item adapter - for pipelines (included with Scrapy 2.2+)
+itemadapter>=0.8.0
+
+# MySQL support - for MySQL pipeline (ServBay)
+PyMySQL>=1.1.0
+
+# Web server - xem dữ liệu tại http://localhost:5000/
+Flask>=2.0.0

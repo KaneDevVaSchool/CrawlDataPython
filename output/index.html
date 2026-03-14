@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Danh sách ứng cử HĐND cấp tỉnh</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 20px; background: #f5f7fa; }
+    h1 { color: #1a365d; margin-bottom: 20px; }
+    .toolbar { margin-bottom: 16px; display: flex; gap: 12px; flex-wrap: wrap; }
+    input[type="search"] { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; min-width: 200px; font-size: 14px; }
+    select { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; }
+    .table-wrap { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    th { background: #2c5282; color: white; font-weight: 600; position: sticky; top: 0; }
+    tr:hover { background: #f7fafc; }
+    .stt { width: 50px; text-align: center; }
+    .name { min-width: 180px; }
+    .position { min-width: 200px; font-size: 13px; }
+    .birthdate { width: 100px; }
+    .province { width: 160px; }
+    .loading { padding: 40px; text-align: center; color: #718096; }
+    .error { padding: 20px; background: #fed7d7; color: #c53030; border-radius: 8px; margin-bottom: 16px; }
+    .stats { color: #718096; font-size: 14px; margin-bottom: 16px; }
+    .btn-detail { padding: 6px 12px; background: #2c5282; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .btn-detail:hover { background: #1a365d; }
+    .btn-detail:disabled { background: #cbd5e0; cursor: not-allowed; }
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+    .modal.show { display: flex; }
+    .modal-content { background: white; border-radius: 12px; max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+    .modal-header { padding: 20px; background: #2c5282; color: white; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center; }
+    .modal-header h2 { margin: 0; font-size: 18px; }
+    .modal-close { background: none; border: none; color: white; font-size: 24px; cursor: pointer; padding: 0 8px; line-height: 1; }
+    .modal-body { padding: 20px; }
+    .detail-row { display: flex; margin-bottom: 12px; font-size: 14px; }
+    .detail-label { font-weight: 600; color: #4a5568; min-width: 140px; }
+    .detail-value { color: #2d3748; }
+    .detail-img { float: right; width: 100px; height: 120px; object-fit: cover; border-radius: 8px; margin-left: 16px; margin-bottom: 12px; }
+    .no-detail { color: #718096; font-style: italic; padding: 20px; text-align: center; }
+    .detail-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0; }
+    .detail-section-title { font-weight: 600; color: #2c5282; margin-bottom: 12px; }
+    .pagination { display: flex; align-items: center; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+    .pagination button { padding: 8px 14px; border: 1px solid #cbd5e0; background: white; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    .pagination button:hover:not(:disabled) { background: #2c5282; color: white; border-color: #2c5282; }
+    .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .pagination button.active { background: #2c5282; color: white; border-color: #2c5282; }
+    .pagination span { color: #718096; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Danh sách ứng cử HĐND cấp tỉnh</h1>
+  <div class="stats" id="stats"></div>
+  <div class="toolbar">
+    <input type="search" id="search" placeholder="Tìm theo tên, chức vụ, quê quán...">
+    <select id="province">
+      <option value="">Tất cả tỉnh/thành</option>
+    </select>
+    <label>
+      Hiển thị:
+      <select id="perPage">
+        <option value="10">10</option>
+        <option value="20" selected>20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="9999">Tất cả</option>
+      </select>
+      / trang
+    </label>
+  </div>
+  <div class="table-wrap">
+    <div class="loading" id="loading">Đang tải dữ liệu...</div>
+    <table id="table" style="display:none">
+      <thead>
+        <tr>
+          <th class="stt">STT</th>
+          <th class="name">Họ và tên</th>
+          <th class="province">Tỉnh/TP</th>
+          <th class="position">Chức vụ tóm tắt</th>
+          <th class="birthdate">Ngày sinh</th>
+          <th>Quê quán</th>
+          <th style="width:90px">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="pagination" id="pagination" style="display:none; padding: 16px; border-top: 1px solid #e2e8f0;"></div>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle">Chi tiết ứng viên</h2>
+        <button class="modal-close" id="modalClose">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <script>
+    let data = [];
+    let detailMap = {};
+    const tbody = document.getElementById('tbody');
+    const table = document.getElementById('table');
+    const loading = document.getElementById('loading');
+    const searchEl = document.getElementById('search');
+    const provinceEl = document.getElementById('province');
+    const perPageEl = document.getElementById('perPage');
+    const paginationEl = document.getElementById('pagination');
+    const statsEl = document.getElementById('stats');
+    let currentPage = 1;
+    const modal = document.getElementById('modal');
+    const modalBody = document.getElementById('modalBody');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalClose = document.getElementById('modalClose');
+
+    function key(d) {
+      return ((d.name || '') + '|' + (d.birthdate || '')).toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+
+    function render(rows, sttOffset = 0) {
+      tbody.innerHTML = rows.map((r, i) => {
+        const hasDetail = !!detailMap[key(r)] || !!(r.detail_url);
+        return `
+        <tr>
+          <td class="stt">${r.candidate_id || (sttOffset + i + 1)}</td>
+          <td class="name">${escapeHtml(r.name)}</td>
+          <td class="province">${escapeHtml(r.province)}</td>
+          <td class="position">${escapeHtml(r.position || r.description)}</td>
+          <td class="birthdate">${escapeHtml(r.birthdate)}</td>
+          <td>${escapeHtml(r.hometown)}</td>
+          <td><button class="btn-detail" data-idx="${i}" ${hasDetail ? '' : 'disabled'}>Chi tiết</button></td>
+        </tr>`;
+      }).join('');
+      tbody.querySelectorAll('.btn-detail:not(:disabled)').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx);
+          const row = rows[idx];
+          showDetail(row);
+        });
+      });
+    }
+
+    function showDetail(row) {
+      const d = detailMap[key(row)] || row;
+      modalTitle.textContent = (d.name || 'Ứng viên') + ' - Chi tiết';
+      let html = '';
+      if (d.detail_url) html += `<div class="detail-section"><a href="${escapeHtml(d.detail_url)}" target="_blank" rel="noopener" style="font-weight:600;color:#2c5282">Xem trang chi tiết chính thức →</a></div>`;
+      if (d.image_url) html += `<img class="detail-img" src="${escapeHtml(d.image_url)}" alt="">`;
+      if (d.gender || d.nationality || d.birthdate || d.ethnic || d.religion || d.hometown || d.current_address) {
+        html += '<div class="detail-section"><div class="detail-section-title">Thông tin cá nhân</div>';
+        if (d.birthdate) html += `<div class="detail-row"><span class="detail-label">Ngày sinh:</span><span class="detail-value">${escapeHtml(d.birthdate)}</span></div>`;
+        if (d.gender) html += `<div class="detail-row"><span class="detail-label">Giới tính:</span><span class="detail-value">${escapeHtml(d.gender)}</span></div>`;
+        if (d.nationality) html += `<div class="detail-row"><span class="detail-label">Quốc tịch:</span><span class="detail-value">${escapeHtml(d.nationality)}</span></div>`;
+        if (d.ethnic) html += `<div class="detail-row"><span class="detail-label">Dân tộc:</span><span class="detail-value">${escapeHtml(d.ethnic)}</span></div>`;
+        if (d.religion) html += `<div class="detail-row"><span class="detail-label">Tôn giáo:</span><span class="detail-value">${escapeHtml(d.religion)}</span></div>`;
+        if (d.hometown) html += `<div class="detail-row"><span class="detail-label">Quê quán:</span><span class="detail-value">${escapeHtml(d.hometown)}</span></div>`;
+        if (d.current_address) html += `<div class="detail-row"><span class="detail-label">Nơi ở hiện nay:</span><span class="detail-value">${escapeHtml(d.current_address)}</span></div>`;
+        html += '</div>';
+      }
+      if (d.education || d.foreign_lang || d.degree || d.party_theory || d.professional) {
+        html += '<div class="detail-section"><div class="detail-section-title">Trình độ học vấn</div>';
+        if (d.education) html += `<div class="detail-row"><span class="detail-label">Phổ thông:</span><span class="detail-value">${escapeHtml(d.education)}</span></div>`;
+        if (d.foreign_lang) html += `<div class="detail-row"><span class="detail-label">Ngoại ngữ:</span><span class="detail-value">${escapeHtml(d.foreign_lang)}</span></div>`;
+        if (d.degree) html += `<div class="detail-row"><span class="detail-label">Học hàm, học vị:</span><span class="detail-value">${escapeHtml(d.degree)}</span></div>`;
+        if (d.party_theory) html += `<div class="detail-row"><span class="detail-label">Lý luận chính trị:</span><span class="detail-value">${escapeHtml(d.party_theory)}</span></div>`;
+        if (d.professional) html += `<div class="detail-row"><span class="detail-label">Chuyên môn:</span><span class="detail-value">${escapeHtml(d.professional)}</span></div>`;
+        html += '</div>';
+      }
+      if (d.position || d.work_place || d.party_join_date || d.qh_rep || d.hdnd_rep) {
+        html += '<div class="detail-section"><div class="detail-section-title">Công tác</div>';
+        if (d.position) html += `<div class="detail-row"><span class="detail-label">Chức vụ:</span><span class="detail-value">${escapeHtml(d.position)}</span></div>`;
+        if (d.work_place) html += `<div class="detail-row"><span class="detail-label">Nơi công tác:</span><span class="detail-value">${escapeHtml(d.work_place)}</span></div>`;
+        if (d.party_join_date) html += `<div class="detail-row"><span class="detail-label">Ngày vào Đảng:</span><span class="detail-value">${escapeHtml(d.party_join_date)}</span></div>`;
+        if (d.qh_rep) html += `<div class="detail-row"><span class="detail-label">Đại biểu QH:</span><span class="detail-value">${escapeHtml(d.qh_rep)}</span></div>`;
+        if (d.hdnd_rep) html += `<div class="detail-row"><span class="detail-label">Đại biểu HĐND:</span><span class="detail-value">${escapeHtml(d.hdnd_rep)}</span></div>`;
+        html += '</div>';
+      }
+      if (!html && !detailMap[key(row)]) html = '<div class="no-detail">Chưa có dữ liệu chi tiết. Chạy: python run_crawl.py để crawl danh sách và chi tiết.</div>';
+      modalBody.innerHTML = html || '<div class="no-detail">Không có thông tin thêm</div>';
+      modal.classList.add('show');
+    }
+
+    function escapeHtml(s) {
+      if (!s) return '';
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    function filter() {
+      currentPage = 1;
+      applyFilter();
+    }
+
+    function applyFilter() {
+      const q = searchEl.value.toLowerCase().trim();
+      const prov = provinceEl.value;
+      let rows = data;
+      if (q) rows = rows.filter(r => (r.name && r.name.toLowerCase().includes(q)) || (r.position && r.position.toLowerCase().includes(q)) || (r.description && r.description.toLowerCase().includes(q)) || (r.hometown && r.hometown.toLowerCase().includes(q)));
+      if (prov) rows = rows.filter(r => r.province === prov);
+      const perPage = parseInt(perPageEl.value) || 9999;
+      const totalFiltered = rows.length;
+      const totalPages = perPage >= totalFiltered ? 1 : Math.ceil(totalFiltered / perPage);
+      const start = (currentPage - 1) * perPage;
+      const pageRows = perPage >= totalFiltered ? rows : rows.slice(start, start + perPage);
+      render(pageRows, start);
+      statsEl.textContent = `Hiển thị ${start + 1}-${start + pageRows.length} / ${totalFiltered} ứng viên (tổng ${data.length})`;
+      renderPagination(totalFiltered, totalPages, perPage);
+    }
+
+    function renderPagination(totalFiltered, totalPages, perPage) {
+      if (totalPages <= 1) {
+        paginationEl.style.display = 'none';
+        return;
+      }
+      paginationEl.style.display = 'flex';
+      let html = `<button id="btnPrev" ${currentPage <= 1 ? 'disabled' : ''}>‹ Trước</button>`;
+      const maxShow = 5;
+      let from = Math.max(1, currentPage - Math.floor(maxShow / 2));
+      let to = Math.min(totalPages, from + maxShow - 1);
+      if (to - from < maxShow - 1) from = Math.max(1, to - maxShow + 1);
+      for (let i = from; i <= to; i++) {
+        html += `<button class="page-num ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
+      }
+      html += `<button id="btnNext" ${currentPage >= totalPages ? 'disabled' : ''}>Sau ›</button>`;
+      html += `<span>Trang ${currentPage}/${totalPages}</span>`;
+      paginationEl.innerHTML = html;
+      paginationEl.querySelector('#btnPrev').addEventListener('click', () => { currentPage--; applyFilter(); });
+      paginationEl.querySelector('#btnNext').addEventListener('click', () => { currentPage++; applyFilter(); });
+      paginationEl.querySelectorAll('.page-num').forEach(btn => {
+        btn.addEventListener('click', () => { currentPage = parseInt(btn.dataset.page); applyFilter(); });
+      });
+    }
+
+    modalClose.addEventListener('click', () => modal.classList.remove('show'));
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('show'); });
+
+    async function load() {
+      try {
+        const apiRes = await fetch('/api/candidates');
+        const json = await apiRes.json();
+        if (!apiRes.ok) throw new Error(json.error || 'Loi ket noi database');
+        data = Array.isArray(json) ? json : (json.items || []);
+        data.forEach(d => { if (d.gender || d.education || d.work_place || d.image_url || d.current_address) detailMap[key(d)] = d; });
+
+        const provinces = [...new Set(data.map(r => r.province).filter(Boolean))].sort();
+        provinces.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p;
+          opt.textContent = p;
+          provinceEl.appendChild(opt);
+        });
+
+        loading.style.display = 'none';
+        table.style.display = 'table';
+        applyFilter();
+
+        searchEl.addEventListener('input', filter);
+        searchEl.addEventListener('keyup', filter);
+        provinceEl.addEventListener('change', filter);
+        perPageEl.addEventListener('change', filter);
+      } catch (e) {
+        loading.innerHTML = '<span class="error">Loi: ' + escapeHtml(e.message) + '.<br>Chay <code>python serve.py</code> va dam bao MySQL dang chay, da crawl du lieu.</span>';
+      }
+    }
+    load();
+  </script>
+</body>
+</html>
