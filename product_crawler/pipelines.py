@@ -48,14 +48,14 @@ class JsonFilePipeline:
     
     def process_item(self, item, spider):
         """Add item to the collection. Skip HDND - chi luu vao MySQL."""
-        if spider.name in ('hdnd_candidates', 'hdnd_detail'):
+        if spider.name in ('hdnd_candidates', 'hdnd_detail', 'hdnd_xa'):
             return item
         self.items.append(ItemAdapter(item).asdict())
         return item
 
     def close_spider(self, spider):
         """Write all items to JSON file when spider closes."""
-        if spider.name in ('hdnd_candidates', 'hdnd_detail'):
+        if spider.name in ('hdnd_candidates', 'hdnd_detail', 'hdnd_xa'):
             return
         import os
         os.makedirs(os.path.dirname(self.output_file) or '.', exist_ok=True)
@@ -109,9 +109,7 @@ class MySQLPipeline:
                 charset='utf8mb4'
             )
             self.cursor = self.connection.cursor()
-            # Không tạo bảng products cho spider HDND
-            if spider.name not in ('hdnd_candidates', 'hdnd_detail'):
-                self._create_table()
+            # Không tạo bảng products - chỉ dùng HDND
         except ImportError:
             spider.logger.warning(
                 'PyMySQL not installed. Run: pip install pymysql'
@@ -221,6 +219,45 @@ class DetailUrlsFilePipeline:
 
 
 # =============================================================================
+# CANDIDATE JSON PIPELINE (hdnd_xa, hdnd_detail -> JSON)
+# =============================================================================
+
+class CandidateJsonPipeline:
+    """Ghi CandidateItem từ hdnd_xa, hdnd_detail ra file JSON."""
+
+    def __init__(self, output_file):
+        self.output_file = output_file
+        self.items = []
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        output_file = crawler.settings.get(
+            'JSON_OUTPUT_FILE',
+            'output/hdnd_xa_candidates.json'
+        )
+        return cls(output_file)
+
+    def open_spider(self, spider):
+        self.items = []
+
+    def process_item(self, item, spider):
+        if spider.name not in ('hdnd_xa', 'hdnd_detail'):
+            return item
+        if hasattr(item, 'keys') and 'name' in item:
+            self.items.append(ItemAdapter(item).asdict())
+        return item
+
+    def close_spider(self, spider):
+        if spider.name not in ('hdnd_xa', 'hdnd_detail') or not self.items:
+            return
+        import os
+        os.makedirs(os.path.dirname(self.output_file) or '.', exist_ok=True)
+        with open(self.output_file, 'w', encoding='utf-8') as f:
+            json.dump(self.items, f, ensure_ascii=False, indent=2)
+        spider.logger.info('Đã ghi %d ứng viên vào %s', len(self.items), self.output_file)
+
+
+# =============================================================================
 # DUPLICATE FILTER PIPELINE
 # =============================================================================
 
@@ -300,7 +337,7 @@ class CandidateMySQLPipeline:
 
     def open_spider(self, spider):
         self._current_spider = spider
-        if spider.name not in ('hdnd_candidates', 'hdnd_detail'):
+        if spider.name not in ('hdnd_candidates', 'hdnd_detail', 'hdnd_xa'):
             return
         try:
             import pymysql
@@ -310,6 +347,7 @@ class CandidateMySQLPipeline:
             )
             self.cursor = self.connection.cursor()
             self._create_tables()
+            self._ensure_detail_columns()
         except ImportError:
             spider.logger.warning('PyMySQL not installed.')
         except Exception as e:
@@ -345,6 +383,8 @@ class CandidateMySQLPipeline:
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 candidate_uuid VARCHAR(100) NOT NULL,
                 detail_url VARCHAR(767),
+                province VARCHAR(255),
+                constituency VARCHAR(500),
                 name VARCHAR(255),
                 birthdate VARCHAR(50),
                 position VARCHAR(500),
@@ -370,10 +410,22 @@ class CandidateMySQLPipeline:
             )
         """)
         self.connection.commit()
-    
+
+    def _ensure_detail_columns(self):
+        """Thêm cột province, constituency vào hdnd_detail_info nếu chưa có (migration)."""
+        for col, spec in [('province', 'VARCHAR(255)'), ('constituency', 'VARCHAR(500)')]:
+            try:
+                self.cursor.execute(
+                    f"ALTER TABLE hdnd_detail_info ADD COLUMN {col} {spec}"
+                )
+                self.connection.commit()
+            except Exception as e:
+                if 'Duplicate column' not in str(e):
+                    logger.warning('ALTER hdnd_detail_info: %s', e)
+
     def process_item(self, item, spider=None):
         spider = spider or self._current_spider
-        if spider and spider.name not in ('hdnd_candidates', 'hdnd_detail'):
+        if spider and spider.name not in ('hdnd_candidates', 'hdnd_detail', 'hdnd_xa'):
             return item
         adapter = ItemAdapter(item)
         if not adapter.get('name') and not adapter.get('candidate_id') and not adapter.get('detail_url'):
@@ -385,7 +437,7 @@ class CandidateMySQLPipeline:
             cid = (adapter.get('candidate_id') or '')[:100] or None
             cuuid = (adapter.get('candidate_uuid') or '')[:100] or None
 
-            # Phân biệt detail (từ hdnd_detail) vs list (từ hdnd_candidates) - dùng spider hoặc item
+            # Phân biệt detail (từ hdnd_detail) vs list (từ hdnd_candidates). hdnd_xa -> HdndXaMySQLPipeline
             is_detail = (spider and spider.name == 'hdnd_detail') or (
                 adapter.get('detail_url') and 'thong-tin-nguoi-ung-cu' in str(adapter.get('detail_url', ''))
                 and (adapter.get('gender') or adapter.get('education') or adapter.get('work_place'))
@@ -396,13 +448,14 @@ class CandidateMySQLPipeline:
                     cuuid = adapter.get('detail_url', '')[:100] or 'unknown'
                 self.cursor.execute("""
                     INSERT INTO hdnd_detail_info
-                    (candidate_uuid, detail_url, name, birthdate, position, hometown,
+                    (candidate_uuid, detail_url, province, constituency, name, birthdate, position, hometown,
                      gender, nationality, ethnic, religion, current_address,
                      education, foreign_lang, degree, party_theory, professional,
                      work_place, party_join_date, qh_rep, hdnd_rep, image_url)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON DUPLICATE KEY UPDATE
-                        detail_url=VALUES(detail_url), name=VALUES(name), birthdate=VALUES(birthdate),
+                        detail_url=VALUES(detail_url), province=VALUES(province), constituency=VALUES(constituency),
+                        name=VALUES(name), birthdate=VALUES(birthdate),
                         position=VALUES(position), hometown=VALUES(hometown),
                         gender=VALUES(gender), nationality=VALUES(nationality), ethnic=VALUES(ethnic),
                         religion=VALUES(religion), current_address=VALUES(current_address),
@@ -413,6 +466,8 @@ class CandidateMySQLPipeline:
                         hdnd_rep=VALUES(hdnd_rep), image_url=VALUES(image_url)
                 """, (
                     cuuid, detail_url,
+                    (adapter.get('province') or '')[:255],
+                    (adapter.get('constituency') or '')[:500],
                     adapter.get('name'), adapter.get('birthdate') or '',
                     (adapter.get('position') or '')[:500], (adapter.get('hometown') or '')[:500],
                     (adapter.get('gender') or '')[:50], (adapter.get('nationality') or '')[:100],
@@ -445,6 +500,137 @@ class CandidateMySQLPipeline:
             self.connection.rollback()
         return item
     
+    def close_spider(self, spider):
+        if self.cursor:
+            self.cursor.close()
+        if self.connection:
+            self.connection.close()
+
+
+# =============================================================================
+# HĐND CẤP XÃ - BẢNG RIÊNG hdnd_xa_candidates
+# =============================================================================
+
+class HdndXaMySQLPipeline:
+    """Lưu CandidateItem từ spider hdnd_xa vào bảng hdnd_xa_candidates."""
+
+    def __init__(self, host, port, database, user, password):
+        self.host = host
+        self.port = port
+        self.database = database
+        self.user = user
+        self.password = password
+        self.connection = None
+        self.cursor = None
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        return cls(
+            host=crawler.settings.get('MYSQL_HOST', 'localhost'),
+            port=crawler.settings.get('MYSQL_PORT', 3306),
+            database=crawler.settings.get('MYSQL_DATABASE', 'scrapy_products'),
+            user=crawler.settings.get('MYSQL_USER', 'root'),
+            password=crawler.settings.get('MYSQL_PASSWORD', '')
+        )
+
+    def open_spider(self, spider):
+        if spider.name != 'hdnd_xa':
+            return
+        try:
+            import pymysql
+            self.connection = pymysql.connect(
+                host=self.host, port=self.port, database=self.database,
+                user=self.user, password=self.password, charset='utf8mb4'
+            )
+            self.cursor = self.connection.cursor()
+            self._create_table()
+        except Exception as e:
+            spider.logger.error('HdndXa MySQL: %s', e)
+
+    def _create_table(self):
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS hdnd_xa_candidates (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                candidate_uuid VARCHAR(100) NOT NULL,
+                detail_url VARCHAR(767),
+                province VARCHAR(255),
+                constituency VARCHAR(500),
+                name VARCHAR(255),
+                birthdate VARCHAR(50),
+                position VARCHAR(500),
+                hometown VARCHAR(500),
+                gender VARCHAR(50),
+                nationality VARCHAR(100),
+                ethnic VARCHAR(100),
+                religion VARCHAR(100),
+                current_address VARCHAR(500),
+                education VARCHAR(255),
+                foreign_lang VARCHAR(255),
+                degree VARCHAR(255),
+                party_theory VARCHAR(255),
+                professional VARCHAR(500),
+                work_place VARCHAR(500),
+                party_join_date VARCHAR(50),
+                qh_rep VARCHAR(255),
+                hdnd_rep VARCHAR(255),
+                image_url VARCHAR(1000),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_candidate_uuid (candidate_uuid),
+                INDEX idx_province (province),
+                INDEX idx_constituency (constituency)
+            )
+        """)
+        self.connection.commit()
+
+    def process_item(self, item, spider):
+        if spider.name != 'hdnd_xa':
+            return item
+        if not self.connection:
+            return item
+        adapter = ItemAdapter(item)
+        if not adapter.get('name') and not adapter.get('detail_url'):
+            return item
+        try:
+            cuuid = (adapter.get('candidate_uuid') or '')[:100] or None
+            if not cuuid:
+                cuuid = (adapter.get('detail_url') or '')[:100] or 'unknown'
+            detail_url = (adapter.get('detail_url') or '')[:767] or None
+            self.cursor.execute("""
+                INSERT INTO hdnd_xa_candidates
+                (candidate_uuid, detail_url, province, constituency, name, birthdate, position, hometown,
+                 gender, nationality, ethnic, religion, current_address, education, foreign_lang,
+                 degree, party_theory, professional, work_place, party_join_date, qh_rep, hdnd_rep, image_url)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    detail_url=VALUES(detail_url), province=VALUES(province), constituency=VALUES(constituency),
+                    name=VALUES(name), birthdate=VALUES(birthdate), position=VALUES(position), hometown=VALUES(hometown),
+                    gender=VALUES(gender), nationality=VALUES(nationality), ethnic=VALUES(ethnic), religion=VALUES(religion),
+                    current_address=VALUES(current_address), education=VALUES(education), foreign_lang=VALUES(foreign_lang),
+                    degree=VALUES(degree), party_theory=VALUES(party_theory), professional=VALUES(professional),
+                    work_place=VALUES(work_place), party_join_date=VALUES(party_join_date),
+                    qh_rep=VALUES(qh_rep), hdnd_rep=VALUES(hdnd_rep), image_url=VALUES(image_url)
+            """, (
+                cuuid, detail_url,
+                (adapter.get('province') or '')[:255],
+                (adapter.get('constituency') or '')[:500],
+                adapter.get('name'), adapter.get('birthdate') or '',
+                (adapter.get('position') or '')[:500], (adapter.get('hometown') or '')[:500],
+                (adapter.get('gender') or '')[:50], (adapter.get('nationality') or '')[:100],
+                (adapter.get('ethnic') or '')[:100], (adapter.get('religion') or '')[:100],
+                (adapter.get('current_address') or '')[:500],
+                (adapter.get('education') or '')[:255], (adapter.get('foreign_lang') or '')[:255],
+                (adapter.get('degree') or '')[:255], (adapter.get('party_theory') or '')[:255],
+                (adapter.get('professional') or '')[:500], (adapter.get('work_place') or '')[:500],
+                (adapter.get('party_join_date') or '')[:50],
+                (adapter.get('qh_rep') or '')[:255], (adapter.get('hdnd_rep') or '')[:255],
+                (adapter.get('image_url') or '')[:1000]
+            ))
+            self.connection.commit()
+        except Exception as e:
+            logger.error('HdndXa MySQL error: %s', e)
+            self.connection.rollback()
+        return item
+
     def close_spider(self, spider):
         if self.cursor:
             self.cursor.close()

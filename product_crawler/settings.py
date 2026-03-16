@@ -62,9 +62,11 @@ DOWNLOADER_MIDDLEWARES = {
 ITEM_PIPELINES = {
     'product_crawler.pipelines.DuplicateFilterPipeline': 100,
     'product_crawler.pipelines.JsonFilePipeline': 300,
+    'product_crawler.pipelines.CandidateJsonPipeline': 320,
     'product_crawler.pipelines.DetailUrlsFilePipeline': 350,
     'product_crawler.pipelines.MySQLPipeline': 400,
     'product_crawler.pipelines.CandidateMySQLPipeline': 500,
+    'product_crawler.pipelines.HdndXaMySQLPipeline': 510,
 }
 
 # =============================================================================

@@ -19,7 +19,18 @@ PAGE_SIZE = 300
 # File output
 DETAIL_URLS_FILE = "output/detail_urls.txt"
 
-# Danh sách nguồn: tỉnh/thành cần crawl
+# Danh sách nguồn HĐND cấp xã (xã/phường) - spider hdnd_xa
+# ds-ung-cu-hdnd-cap-xa?tinhThanhKhoaId=... (API: get-danh-sach-ung-cu-hdnd-cap-xa)
+HDND_XA_SOURCES = [
+    {
+        "name": "Thành phố Hồ Chí Minh",
+        "tinh_thanh_id": "ddfaac97-a898-48ae-f9d7-08ddb2649d30",
+        "khoa": 16,
+    },
+   
+]
+
+# Danh sách nguồn: tỉnh/thành cần crawl (HĐND cấp tỉnh)
 # Thêm tỉnh: copy tinhThanhKhoaId từ request khi chọn tỉnh trên trang
 HDND_SOURCES = [
     {

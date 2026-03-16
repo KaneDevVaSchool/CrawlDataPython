@@ -20,7 +20,8 @@
     .name { min-width: 180px; }
     .position { min-width: 200px; font-size: 13px; }
     .birthdate { width: 100px; }
-    .province { width: 160px; }
+    .province { width: 140px; }
+    .constituency { width: 160px; font-size: 13px; }
     .loading { padding: 40px; text-align: center; color: #718096; }
     .error { padding: 20px; background: #fed7d7; color: #c53030; border-radius: 8px; margin-bottom: 16px; }
     .stats { color: #718096; font-size: 14px; margin-bottom: 16px; }
@@ -50,12 +51,20 @@
   </style>
 </head>
 <body>
-  <h1>Danh sách ứng cử HĐND cấp tỉnh</h1>
+  <h1>Danh sách ứng cử HĐND</h1>
   <div class="stats" id="stats"></div>
   <div class="toolbar">
-    <input type="search" id="search" placeholder="Tìm theo tên, chức vụ, quê quán...">
+    <select id="level">
+      <option value="">Tất cả (tỉnh + xã)</option>
+      <option value="tinh">Cấp tỉnh</option>
+      <option value="xa">Cấp xã</option>
+    </select>
+    <input type="search" id="search" placeholder="Tìm theo tên, chức vụ, quê quán, xã/phường...">
     <select id="province">
       <option value="">Tất cả tỉnh/thành</option>
+    </select>
+    <select id="constituency" style="min-width:180px">
+      <option value="">Tất cả xã/phường</option>
     </select>
     <label>
       Hiển thị:
@@ -77,6 +86,7 @@
           <th class="stt">STT</th>
           <th class="name">Họ và tên</th>
           <th class="province">Tỉnh/TP</th>
+          <th class="constituency">Xã/phường</th>
           <th class="position">Chức vụ tóm tắt</th>
           <th class="birthdate">Ngày sinh</th>
           <th>Quê quán</th>
@@ -104,8 +114,10 @@
     const tbody = document.getElementById('tbody');
     const table = document.getElementById('table');
     const loading = document.getElementById('loading');
+    const levelEl = document.getElementById('level');
     const searchEl = document.getElementById('search');
     const provinceEl = document.getElementById('province');
+    const constituencyEl = document.getElementById('constituency');
     const perPageEl = document.getElementById('perPage');
     const paginationEl = document.getElementById('pagination');
     const statsEl = document.getElementById('stats');
@@ -127,6 +139,7 @@
           <td class="stt">${r.candidate_id || (sttOffset + i + 1)}</td>
           <td class="name">${escapeHtml(r.name)}</td>
           <td class="province">${escapeHtml(r.province)}</td>
+          <td class="constituency">${escapeHtml(r.constituency)}</td>
           <td class="position">${escapeHtml(r.position || r.description)}</td>
           <td class="birthdate">${escapeHtml(r.birthdate)}</td>
           <td>${escapeHtml(r.hometown)}</td>
@@ -197,9 +210,13 @@
     function applyFilter() {
       const q = searchEl.value.toLowerCase().trim();
       const prov = provinceEl.value;
+      const constVal = constituencyEl.value;
+      const lvl = levelEl.value;
       let rows = data;
-      if (q) rows = rows.filter(r => (r.name && r.name.toLowerCase().includes(q)) || (r.position && r.position.toLowerCase().includes(q)) || (r.description && r.description.toLowerCase().includes(q)) || (r.hometown && r.hometown.toLowerCase().includes(q)));
+      if (lvl) rows = rows.filter(r => r.level === lvl);
+      if (q) rows = rows.filter(r => (r.name && r.name.toLowerCase().includes(q)) || (r.position && r.position.toLowerCase().includes(q)) || (r.description && r.description.toLowerCase().includes(q)) || (r.hometown && r.hometown.toLowerCase().includes(q)) || (r.constituency && r.constituency.toLowerCase().includes(q)));
       if (prov) rows = rows.filter(r => r.province === prov);
+      if (constVal) rows = rows.filter(r => r.constituency === constVal);
       const perPage = parseInt(perPageEl.value) || 9999;
       const totalFiltered = rows.length;
       const totalPages = perPage >= totalFiltered ? 1 : Math.ceil(totalFiltered / perPage);
@@ -252,14 +269,23 @@
           opt.textContent = p;
           provinceEl.appendChild(opt);
         });
+        const constituencies = [...new Set(data.map(r => r.constituency).filter(Boolean))].sort();
+        constituencies.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c;
+          opt.textContent = c;
+          constituencyEl.appendChild(opt);
+        });
 
         loading.style.display = 'none';
         table.style.display = 'table';
         applyFilter();
 
+        levelEl.addEventListener('change', filter);
         searchEl.addEventListener('input', filter);
         searchEl.addEventListener('keyup', filter);
         provinceEl.addEventListener('change', filter);
+        constituencyEl.addEventListener('change', filter);
         perPageEl.addEventListener('change', filter);
       } catch (e) {
         loading.innerHTML = '<span class="error">Loi: ' + escapeHtml(e.message) + '.<br>Chay <code>python serve.py</code> va dam bao MySQL dang chay, da crawl du lieu.</span>';

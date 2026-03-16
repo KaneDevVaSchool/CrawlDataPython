@@ -10,7 +10,7 @@ Dữ liệu: chỉ từ MySQL (hdnd_candidates + hdnd_detail_info).
 import os
 
 def load_from_db():
-    """Đọc từ MySQL, merge list + detail qua candidate_uuid."""
+    """Đọc từ MySQL: hdnd_candidates + hdnd_detail_info (cấp tỉnh) + hdnd_detail_info (cấp xã)."""
     try:
         import pymysql
         from product_crawler.settings import MYSQL_HOST, MYSQL_PORT, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD
@@ -19,6 +19,7 @@ def load_from_db():
             user=MYSQL_USER, password=MYSQL_PASSWORD, charset='utf8mb4'
         )
         cur = conn.cursor(pymysql.cursors.DictCursor)
+        # 1. Cấp tỉnh: hdnd_candidates merge với hdnd_detail_info
         cur.execute("""
             SELECT c.id, c.name, c.province, c.party, c.constituency, c.description,
                    c.detail_url, c.candidate_id, c.candidate_uuid, c.position, c.birthdate, c.hometown
@@ -28,13 +29,30 @@ def load_from_db():
         rows = cur.fetchall()
         cur.execute("SELECT * FROM hdnd_detail_info")
         details = {r['candidate_uuid']: r for r in cur.fetchall() if r.get('candidate_uuid')}
-        cur.close()
-        conn.close()
-        # Merge detail vào list
+        # Merge detail vào list cấp tỉnh
         for r in rows:
             d = details.get(r.get('candidate_uuid'))
             if d:
                 r.update({k: v for k, v in d.items() if k not in ('id', 'created_at') and v})
+            r['level'] = 'tinh'
+        # 2. Cấp xã: từ bảng riêng hdnd_xa_candidates
+        try:
+            cur.execute("""
+                SELECT candidate_uuid, detail_url, province, constituency, name, birthdate, position, hometown,
+                       gender, nationality, ethnic, religion, current_address, education, foreign_lang,
+                       degree, party_theory, professional, work_place, party_join_date, qh_rep, hdnd_rep, image_url
+                FROM hdnd_xa_candidates
+            """)
+            xa_rows = cur.fetchall()
+            for r in xa_rows:
+                r['level'] = 'xa'
+                r['candidate_id'] = ''
+                rows.append(r)
+        except Exception:
+            pass
+        cur.close()
+        conn.close()
+        rows.sort(key=lambda x: ((x.get('province') or ''), (x.get('constituency') or ''), (x.get('name') or '')))
         return rows
     except Exception as e:
         print(f"[serve] MySQL: {e}")
