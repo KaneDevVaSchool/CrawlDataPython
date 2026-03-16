@@ -23,8 +23,8 @@ DETAIL_URLS_FILE = "output/detail_urls.txt"
 # ds-ung-cu-hdnd-cap-xa?tinhThanhKhoaId=... (API: get-danh-sach-ung-cu-hdnd-cap-xa)
 HDND_XA_SOURCES = [
     {
-        "name": "Thành phố Hồ Chí Minh",
-        "tinh_thanh_id": "ddfaac97-a898-48ae-f9d7-08ddb2649d30",
+        "name": "Cà Mau",
+        "tinh_thanh_id": "691fecb4-cf4d-4729-f9dc-08ddb2649d30",
         "khoa": 16,
     },
    
