@@ -41,7 +41,7 @@ def load_from_db():
                 r['level'] = 'tinh'
         except Exception as ex:
             print(f"[serve] hdnd_candidates/detail_info: {ex} (bỏ qua nếu chỉ có cấp xã)")
-        # 2. Cấp xã: từ bảng riêng hdnd_xa_candidates
+        # 2. Cấp xã: hdnd_xa_candidates + hdnd_xa_detail_info (merge chi tiết như cấp tỉnh)
         xa_rows = []
         try:
             cur.execute("""
@@ -51,12 +51,21 @@ def load_from_db():
                 FROM hdnd_xa_candidates
             """)
             xa_rows = cur.fetchall()
+            try:
+                cur.execute("SELECT * FROM hdnd_xa_detail_info")
+                xa_details = {r['candidate_uuid']: r for r in cur.fetchall() if r.get('candidate_uuid')}
+                for r in xa_rows:
+                    d = xa_details.get(r.get('candidate_uuid'))
+                    if d:
+                        r.update({k: v for k, v in d.items() if k not in ('id', 'created_at') and v})
+            except Exception:
+                pass  # bảng chưa có dữ liệu
             for r in xa_rows:
                 r['level'] = 'xa'
                 r['candidate_id'] = ''
                 rows.append(r)
             if xa_rows:
-                print(f"[serve] Loaded {len(xa_rows)} candidates from hdnd_xa_candidates")
+                print(f"[serve] Loaded {len(xa_rows)} from hdnd_xa_candidates")
         except Exception as ex:
             print(f"[serve] hdnd_xa_candidates error: {ex}")
         # Fallback: đọc từ JSON nếu MySQL cấp xã trống/lỗi

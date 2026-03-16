@@ -543,11 +543,12 @@ class HdndXaMySQLPipeline:
                 user=self.user, password=self.password, charset='utf8mb4'
             )
             self.cursor = self.connection.cursor()
-            self._create_table()
+            self._create_tables()
         except Exception as e:
             spider.logger.error('HdndXa MySQL: %s', e)
 
-    def _create_table(self):
+    def _create_tables(self):
+        # Bảng danh sách (giữ cấu trúc cũ để tương thích)
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS hdnd_xa_candidates (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -580,6 +581,39 @@ class HdndXaMySQLPipeline:
                 INDEX idx_constituency (constituency)
             )
         """)
+        # Bảng chi tiết (cấu trúc giống hdnd_detail_info)
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS hdnd_xa_detail_info (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                candidate_uuid VARCHAR(100) NOT NULL,
+                detail_url VARCHAR(767),
+                province VARCHAR(255),
+                constituency VARCHAR(500),
+                name VARCHAR(255),
+                birthdate VARCHAR(50),
+                position VARCHAR(500),
+                hometown VARCHAR(500),
+                gender VARCHAR(50),
+                nationality VARCHAR(100),
+                ethnic VARCHAR(100),
+                religion VARCHAR(100),
+                current_address VARCHAR(500),
+                education VARCHAR(255),
+                foreign_lang VARCHAR(255),
+                degree VARCHAR(255),
+                party_theory VARCHAR(255),
+                professional VARCHAR(500),
+                work_place VARCHAR(500),
+                party_join_date VARCHAR(50),
+                qh_rep VARCHAR(255),
+                hdnd_rep VARCHAR(255),
+                image_url VARCHAR(1000),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_candidate_uuid (candidate_uuid),
+                INDEX idx_detail_url (detail_url),
+                INDEX idx_province (province)
+            )
+        """)
         self.connection.commit()
 
     def process_item(self, item, spider):
@@ -595,8 +629,42 @@ class HdndXaMySQLPipeline:
             if not cuuid:
                 cuuid = (adapter.get('detail_url') or '')[:100] or 'unknown'
             detail_url = (adapter.get('detail_url') or '')[:767] or None
+
+            # 1. hdnd_xa_candidates: danh sách (đủ field để hiển thị)
             self.cursor.execute("""
                 INSERT INTO hdnd_xa_candidates
+                (candidate_uuid, detail_url, province, constituency, name, birthdate, position, hometown,
+                 gender, nationality, ethnic, religion, current_address, education, foreign_lang,
+                 degree, party_theory, professional, work_place, party_join_date, qh_rep, hdnd_rep, image_url)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    detail_url=VALUES(detail_url), province=VALUES(province), constituency=VALUES(constituency),
+                    name=VALUES(name), birthdate=VALUES(birthdate), position=VALUES(position), hometown=VALUES(hometown),
+                    gender=VALUES(gender), nationality=VALUES(nationality), ethnic=VALUES(ethnic), religion=VALUES(religion),
+                    current_address=VALUES(current_address), education=VALUES(education), foreign_lang=VALUES(foreign_lang),
+                    degree=VALUES(degree), party_theory=VALUES(party_theory), professional=VALUES(professional),
+                    work_place=VALUES(work_place), party_join_date=VALUES(party_join_date),
+                    qh_rep=VALUES(qh_rep), hdnd_rep=VALUES(hdnd_rep), image_url=VALUES(image_url)
+            """, (
+                cuuid, detail_url,
+                (adapter.get('province') or '')[:255],
+                (adapter.get('constituency') or '')[:500],
+                adapter.get('name'), adapter.get('birthdate') or '',
+                (adapter.get('position') or '')[:500], (adapter.get('hometown') or '')[:500],
+                (adapter.get('gender') or '')[:50], (adapter.get('nationality') or '')[:100],
+                (adapter.get('ethnic') or '')[:100], (adapter.get('religion') or '')[:100],
+                (adapter.get('current_address') or '')[:500],
+                (adapter.get('education') or '')[:255], (adapter.get('foreign_lang') or '')[:255],
+                (adapter.get('degree') or '')[:255], (adapter.get('party_theory') or '')[:255],
+                (adapter.get('professional') or '')[:500], (adapter.get('work_place') or '')[:500],
+                (adapter.get('party_join_date') or '')[:50],
+                (adapter.get('qh_rep') or '')[:255], (adapter.get('hdnd_rep') or '')[:255],
+                (adapter.get('image_url') or '')[:1000]
+            ))
+
+            # 2. hdnd_xa_detail_info: chi tiết đầy đủ (cấu trúc giống hdnd_detail_info)
+            self.cursor.execute("""
+                INSERT INTO hdnd_xa_detail_info
                 (candidate_uuid, detail_url, province, constituency, name, birthdate, position, hometown,
                  gender, nationality, ethnic, religion, current_address, education, foreign_lang,
                  degree, party_theory, professional, work_place, party_join_date, qh_rep, hdnd_rep, image_url)
