@@ -42,6 +42,7 @@ p = argparse.ArgumentParser()
 p.add_argument("-limit", type=int, help="Gioi han so xa (vd: 5)")
 p.add_argument("-limit-candidate", type=int, dest="limit_candidate", help="Gioi han ung vien moi xa")
 p.add_argument("-source", type=str, help="Chi 1 nguon: index (0) hoac ten tinh")
+p.add_argument("-fast", action="store_true", help="Che do nhanh (delay 0.2s, 6 concurrent)")
 p.add_argument("-debug", action="store_true", help="Log DEBUG")
 args = p.parse_args()
 
@@ -54,6 +55,14 @@ if args.source:
     cmd.extend(["-a", f"source={args.source}"])
 if args.debug:
     cmd.extend(["-s", "LOG_LEVEL=DEBUG"])
+if args.fast:
+    cmd.extend([
+        "-s", "DOWNLOAD_DELAY=0.15",
+        "-s", "CONCURRENT_REQUESTS_PER_DOMAIN=12",
+        "-s", "CONCURRENT_REQUESTS=24",
+        "-s", "AUTOTHROTTLE_ENABLED=False",
+    ])
+    print("  Che do nhanh: -fast")
 
 print("=" * 50)
 print("Crawl HDND cap xa (hdnd_xa)")

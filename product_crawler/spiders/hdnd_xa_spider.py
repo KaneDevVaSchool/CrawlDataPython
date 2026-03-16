@@ -53,8 +53,14 @@ class HdndXaSpider(scrapy.Spider):
     allowed_domains = ['hoidongbaucu.quochoi.vn']
 
     custom_settings = {
-        'DOWNLOAD_DELAY': 2,
-        'CONCURRENT_REQUESTS_PER_DOMAIN': 1,
+        'DOWNLOAD_DELAY': 0.3,
+        'CONCURRENT_REQUESTS_PER_DOMAIN': 8,
+        'CONCURRENT_REQUESTS': 16,
+        'AUTOTHROTTLE_TARGET_CONCURRENCY': 6.0,
+        'AUTOTHROTTLE_START_DELAY': 0.3,
+        'AUTOTHROTTLE_MAX_DELAY': 2.0,
+        'RANDOMIZE_DOWNLOAD_DELAY': True,
+        'WARN_ON_GENERATOR_RETURN_VALUE': False,
         'JSON_OUTPUT_FILE': 'output/hdnd_xa_candidates.json',
     }
 
@@ -272,13 +278,14 @@ class HdndXaSpider(scrapy.Spider):
             ).strip()
         constituency = commune or ''
 
-        # Lấy total từ "Tổng số: N" (chỉ trang 1)
+        # Lấy total từ "Tổng số: N" hoặc "Tổng số N" (chỉ trang 1). API mặc định 10/trang.
         if page_num == 1:
-            total_m = re.search(r'Tổng\s*số\s*[:\s]+(\d+)', body, re.I | re.U)
+            total_m = re.search(r'Tổng\s*số\s*[:\=]?\s*(\d+)', body, re.I | re.U)
             total_from_page = int(total_m.group(1)) if total_m else 0
 
         # Thu thập UUID từ tr[data-id]
         rows = response.css('tr[data-id], tr.card-nguoi-ung-cu')
+        prev_count = len(collected)
         for row in rows:
             uuid = row.xpath('@data-id').get()
             if uuid and len(uuid) == 36:
@@ -290,10 +297,15 @@ class HdndXaSpider(scrapy.Spider):
         except (ValueError, TypeError):
             limit_candidate = None
 
-        # Phân trang: mặc định ~12 ứng viên/trang, request trang tiếp nếu còn
-        page_size = 12
+        # Phân trang: API có thể trả 8 hoặc 10 ứng viên/trang tùy endpoint. Dùng 8 để không bỏ sót.
+        page_size = 8
+        # Fallback: nếu không có total nhưng trang đủ page_size rows → có thể còn trang tiếp
+        if not total_from_page and len(rows) >= page_size:
+            total_from_page = page_num * page_size + 1  # ước lượng còn ít nhất 1 trang
         need_more = total_from_page and len(collected) < min(total_from_page, limit_candidate or 99999)
-        if need_more and (page_num * page_size < total_from_page):
+        # Không request trang tiếp nếu trang này 0 UUID mới (tránh loop vô hạn)
+        got_new = len(collected) > prev_count
+        if need_more and got_new and (page_num * page_size < total_from_page):
             next_page = page_num + 1
             base_url = f"{BASE_URL}{self.CHI_TIET_XA_API}"
             next_url = f"{base_url}?lang=vi&tinhThanhKhoaId={tinh_id}&xaPhuongKhoaId={xa_id}&khoa={khoa}&pageNumber={next_page}"

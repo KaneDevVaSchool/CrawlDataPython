@@ -254,9 +254,10 @@
     modalClose.addEventListener('click', () => modal.classList.remove('show'));
     modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('show'); });
 
+    const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:5000' : '';
     async function load() {
       try {
-        const apiRes = await fetch('/api/candidates');
+        const apiRes = await fetch(API_BASE + '/api/candidates');
         const json = await apiRes.json();
         if (!apiRes.ok) throw new Error(json.error || 'Loi ket noi database');
         data = Array.isArray(json) ? json : (json.items || []);
@@ -288,7 +289,13 @@
         constituencyEl.addEventListener('change', filter);
         perPageEl.addEventListener('change', filter);
       } catch (e) {
-        loading.innerHTML = '<span class="error">Loi: ' + escapeHtml(e.message) + '.<br>Chay <code>python serve.py</code> va dam bao MySQL dang chay, da crawl du lieu.</span>';
+        let msg = escapeHtml(e.message);
+        if (e.message && (e.message.includes('Failed') || e.message.includes('fetch'))) {
+          msg += '<br><strong>Mở trang qua <a href="http://localhost:5000/">http://localhost:5000/</a> sau khi chạy <code>python serve.py</code></strong>';
+        } else {
+          msg += '<br>Chạy <code>python serve.py</code> và đảm bảo MySQL đang chạy, đã crawl dữ liệu.';
+        }
+        loading.innerHTML = '<span class="error">Lỗi: ' + msg + '</span>';
       }
     }
     load();
