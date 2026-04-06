@@ -6,8 +6,14 @@ Middlewares sit between the engine and the spider, processing requests
 before they're sent and responses before they reach the spider.
 """
 
+import logging
 import random
+import re
+from urllib.parse import urlparse
+
 from scrapy.downloadermiddlewares.useragent import UserAgentMiddleware
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -70,3 +76,40 @@ class RequestDelayMiddleware:
     def process_request(self, request, spider):
         """Requests pass through - actual delay is handled by Scrapy's scheduler."""
         return None
+
+
+class QuochoiD1nMiddleware:
+    """
+    Trang HTML rất ngắn yêu cầu set cookie D1N — tự gửi lại request kèm cookie,
+    giảm miss khi spider chưa kịp xử lý.
+    """
+
+    def process_response(self, request, response, spider):
+        if response.status != 200:
+            return response
+        try:
+            host = urlparse(response.url).netloc or ""
+        except Exception:
+            return response
+        if "hoidongbaucu.quochoi.vn" not in host:
+            return response
+        body = response.text or ""
+        if len(body) > 900:
+            return response
+        if "document.cookie" not in body or "D1N=" not in body:
+            return response
+        m = re.search(r"D1N=([a-f0-9]+)", body)
+        if not m:
+            return response
+        retries = request.meta.get("d1n_retries", 0)
+        if retries >= 5:
+            logger.warning("D1N: bo qua sau 5 lan: %s", response.url[:120])
+            return response
+        logger.debug("D1N: thu lai lan %s %s", retries + 1, response.url[:90])
+        new_meta = dict(request.meta)
+        new_meta["d1n_retries"] = retries + 1
+        return request.replace(
+            cookies={"D1N": m.group(1)},
+            meta=new_meta,
+            dont_filter=True,
+        )

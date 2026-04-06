@@ -17,6 +17,12 @@ import re
 from urllib.parse import urljoin
 import scrapy
 from product_crawler.items import CandidateItem
+from product_crawler.hdnd_crawl_support import (
+    QuochoiHdndMixin,
+    build_raw_data_meta,
+    merge_list_into_item_fields,
+    sanitize_parsed_detail,
+)
 
 try:
     from product_crawler.config import (
@@ -44,7 +50,7 @@ except ImportError:
     }
 
 
-class HdndQhSpider(scrapy.Spider):
+class HdndQhSpider(QuochoiHdndMixin, scrapy.Spider):
     """
     Crawl danh sách ứng cử Quốc hội → chi tiết từng ứng viên.
     Lưu vào hdnd_qh_candidates và hdnd_qh_detail_info.
@@ -54,8 +60,13 @@ class HdndQhSpider(scrapy.Spider):
     allowed_domains = ['hoidongbaucu.quochoi.vn']
 
     custom_settings = {
-        'DOWNLOAD_DELAY': 0.3,
-        'CONCURRENT_REQUESTS_PER_DOMAIN': 4,
+        'DOWNLOAD_DELAY': 0.2,
+        'CONCURRENT_REQUESTS_PER_DOMAIN': 10,
+        'CONCURRENT_REQUESTS': 20,
+        'AUTOTHROTTLE_TARGET_CONCURRENCY': 6.0,
+        'AUTOTHROTTLE_START_DELAY': 0.2,
+        'AUTOTHROTTLE_MAX_DELAY': 2.0,
+        'RANDOMIZE_DOWNLOAD_DELAY': True,
         'JSON_OUTPUT_FILE': 'output/hdnd_qh_candidates.json',
     }
 
@@ -200,6 +211,14 @@ class HdndQhSpider(scrapy.Spider):
 
             # Request detail page (pipeline -> hdnd_qh_detail_info)
             if detail_url and 'thong-tin-nguoi-ung-cu' in detail_url:
+                list_snap = {
+                    'stt': stt,
+                    'list_name': name,
+                    'list_position': position,
+                    'list_birthdate': birthdate,
+                    'list_hometown': hometown,
+                    'cells': cell_values,
+                }
                 yield scrapy.Request(
                     detail_url,
                     callback=self.parse_detail,
@@ -207,6 +226,7 @@ class HdndQhSpider(scrapy.Spider):
                         'province': province,
                         'constituency': '',
                         'khoa': khoa,
+                        'list_snapshot': list_snap,
                     },
                     headers={'Referer': QH_REFERER_URL},
                 )
@@ -327,31 +347,38 @@ class HdndQhSpider(scrapy.Spider):
             if m:
                 data['birthdate'] = m.group(1)
 
-        yield CandidateItem(
-            name=name,
-            province=province,
-            party='',
-            constituency=constituency,
-            description=data.get('position', ''),
-            detail_url=response.url,
-            candidate_id='',
-            candidate_uuid=candidate_uuid,
-            position=data.get('position', ''),
-            birthdate=data.get('birthdate', ''),
-            hometown=data.get('hometown', ''),
-            gender=data.get('gender', ''),
-            nationality=data.get('nationality', ''),
-            ethnic=data.get('ethnic', ''),
-            religion=data.get('religion', ''),
-            current_address=data.get('current_address', ''),
-            education=data.get('education', ''),
-            foreign_lang=data.get('foreign_lang', ''),
-            degree=data.get('degree', ''),
-            party_theory=data.get('party_theory', ''),
-            professional=data.get('professional', ''),
-            work_place=data.get('work_place', ''),
-            party_join_date=data.get('party_join_date', ''),
-            qh_rep=data.get('qh_rep', ''),
-            hdnd_rep=data.get('hdnd_rep', ''),
-            image_url=image_url or '',
-        )
+        sanitize_parsed_detail(data)
+        if image_url and 'QuocHuy' in image_url:
+            image_url = ''
+
+        item = {
+            'name': name,
+            'province': province,
+            'party': '',
+            'constituency': constituency,
+            'description': data.get('position', ''),
+            'detail_url': response.url,
+            'candidate_id': '',
+            'candidate_uuid': candidate_uuid,
+            'position': data.get('position', ''),
+            'birthdate': data.get('birthdate', ''),
+            'hometown': data.get('hometown', ''),
+            'gender': data.get('gender', ''),
+            'nationality': data.get('nationality', ''),
+            'ethnic': data.get('ethnic', ''),
+            'religion': data.get('religion', ''),
+            'current_address': data.get('current_address', ''),
+            'education': data.get('education', ''),
+            'foreign_lang': data.get('foreign_lang', ''),
+            'degree': data.get('degree', ''),
+            'party_theory': data.get('party_theory', ''),
+            'professional': data.get('professional', ''),
+            'work_place': data.get('work_place', ''),
+            'party_join_date': data.get('party_join_date', ''),
+            'qh_rep': data.get('qh_rep', ''),
+            'hdnd_rep': data.get('hdnd_rep', ''),
+            'image_url': image_url or '',
+        }
+        merge_list_into_item_fields(item, response.meta.get('list_snapshot'))
+        item['raw_data'] = build_raw_data_meta(response.meta, response.meta.get('list_snapshot'))
+        yield CandidateItem(**item)

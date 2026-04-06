@@ -57,12 +57,13 @@ if args.debug:
     cmd.extend(["-s", "LOG_LEVEL=DEBUG"])
 if args.fast:
     cmd.extend([
+        "-s", "HDND_FAST=1",
         "-s", "DOWNLOAD_DELAY=0.15",
         "-s", "CONCURRENT_REQUESTS_PER_DOMAIN=12",
         "-s", "CONCURRENT_REQUESTS=24",
         "-s", "AUTOTHROTTLE_ENABLED=False",
     ])
-    print("  Che do nhanh: -fast")
+    print("  Che do nhanh: -fast (HDND_FAST=1)")
 
 print("=" * 50)
 print("Crawl HDND cap xa (hdnd_xa)")

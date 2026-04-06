@@ -5,6 +5,7 @@ Chay crawl danh sach + chi tiet bang 1 lenh:
   python run_crawl.py
   python run_crawl.py -limit 10             # 10 record list + 10 chi tiet
   python run_crawl.py -source 1 -limit 10   # Ha Noi, 10 record
+  python run_crawl.py -fast                 # HDND_FAST=1 (nhanh hon, giong run_crawl_all --fast)
 """
 
 import subprocess
@@ -42,7 +43,11 @@ p.add_argument("-limit", type=int, help="Gioi han so trang chi tiet (vd: 10)")
 p.add_argument("-source", type=str, help="Chi chay 1 tinh: index (0,1) hoac ten (HCM, Ha Noi)")
 p.add_argument("-detail", action="store_true", help="Chi crawl chi tiet tu detail_urls.txt (bo qua list)")
 p.add_argument("-debug", action="store_true", help="Log DEBUG de tim loi")
+p.add_argument("-fast", action="store_true", help="Scrapy -s HDND_FAST=1 (delay/concurrent toi uu)")
 args = p.parse_args()
+
+def _fast_settings():
+    return ["-s", "HDND_FAST=1"] if args.fast else []
 
 url_file = "output/detail_urls.txt"
 
@@ -58,6 +63,9 @@ if args.detail:
     if args.limit:
         cmd.extend(["-a", f"limit={args.limit}"])
         print("Limit:", args.limit)
+    cmd.extend(_fast_settings())
+    if args.fast:
+        print("  Che do nhanh: -fast (HDND_FAST=1)")
     r = subprocess.run(cmd)
     sys.exit(r.returncode)
 
@@ -73,6 +81,9 @@ if args.limit:
     print(f"   List limit: {args.limit}")
 if args.debug:
     cmd1.extend(["-s", "LOG_LEVEL=DEBUG"])
+cmd1.extend(_fast_settings())
+if args.fast:
+    print("  Che do nhanh: -fast (HDND_FAST=1)")
 r1 = subprocess.run(cmd1)
 if r1.returncode != 0:
     print("Error: list crawl failed.")
@@ -86,5 +97,6 @@ cmd = [sys.executable, "-m", "scrapy", "crawl", "hdnd_detail", "-a", f"url_file=
 if args.limit:
     cmd.extend(["-a", f"limit={args.limit}"])
     print(f"   Limit: {args.limit} records")
+cmd.extend(_fast_settings())
 r2 = subprocess.run(cmd)
 sys.exit(r2.returncode)

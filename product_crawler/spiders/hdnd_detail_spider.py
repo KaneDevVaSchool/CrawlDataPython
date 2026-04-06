@@ -18,6 +18,7 @@ import re
 from urllib.parse import urlparse
 import scrapy
 from product_crawler.items import CandidateItem
+from product_crawler.hdnd_crawl_support import QuochoiHdndMixin, sanitize_parsed_detail
 
 try:
     from product_crawler.config import BASE_URL, DETAIL_PATH, KHOA, DETAIL_FIELD_MAP, DETAIL_URLS_FILE, REFERER_URL
@@ -40,7 +41,7 @@ except ImportError:
     }
 
 
-class HdndDetailSpider(scrapy.Spider):
+class HdndDetailSpider(QuochoiHdndMixin, scrapy.Spider):
     """
     Crawl trang chi tiết ứng viên - /thong-tin-nguoi-ung-cu/{uuid}
     """
@@ -49,7 +50,10 @@ class HdndDetailSpider(scrapy.Spider):
     allowed_domains = ['hoidongbaucu.quochoi.vn']
     
     custom_settings = {
-        'DOWNLOAD_DELAY': 1.5,
+        'DOWNLOAD_DELAY': 0.25,
+        'CONCURRENT_REQUESTS_PER_DOMAIN': 12,
+        'CONCURRENT_REQUESTS': 24,
+        'RANDOMIZE_DOWNLOAD_DELAY': True,
         'JSON_OUTPUT_FILE': 'output/hdnd_candidates_detail.json',
     }
     
@@ -197,7 +201,11 @@ class HdndDetailSpider(scrapy.Spider):
             m = re.search(r'(\d{2}/\d{2}/\d{4})', body_text)
             if m:
                 data['birthdate'] = m.group(1)
-        
+
+        sanitize_parsed_detail(data)
+        if image_url and 'QuocHuy' in image_url:
+            image_url = ''
+
         # Build item
         item = CandidateItem(
             name=name,

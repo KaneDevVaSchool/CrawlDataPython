@@ -34,8 +34,10 @@ CONCURRENT_REQUESTS = 8
 # =============================================================================
 # Retry failed HTTP requests (conn errors, timeouts, 5xx)
 RETRY_ENABLED = True
-RETRY_TIMES = 3  # Max retries per request
+RETRY_TIMES = 5  # Max retries per request (mạng chập chờn / 429)
 RETRY_HTTP_CODES = [500, 502, 503, 504, 408, 429]
+# Timeout tải trang (giây) — trang chi tiết đôi khi chậm
+DOWNLOAD_TIMEOUT = 45
 # Retry on connection errors too (handled by RetryMiddleware)
 RETRY_PRIORITY_ADJUST = -1
 
@@ -51,6 +53,8 @@ USER_AGENT = 'product_crawler/1.0 (+https://example.com/bot)'
 DOWNLOADER_MIDDLEWARES = {
     # Rotating user-agent - HIGH priority (runs first)
     'product_crawler.middlewares.RotatingUserAgentMiddleware': 400,
+    # Tự xử lý cookie D1N (quochoi) — giảm trang trắng / miss
+    'product_crawler.middlewares.QuochoiD1nMiddleware': 558,
     # Disable default UserAgent (we use RotatingUserAgentMiddleware)
     'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None,
 }
@@ -103,3 +107,7 @@ AUTOTHROTTLE_ENABLED = True
 AUTOTHROTTLE_START_DELAY = 2.0
 AUTOTHROTTLE_MAX_DELAY = 10.0
 AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0
+
+# Bật tốc độ cao cho spider HĐND/QH: scrapy crawl ... -s HDND_FAST=1
+# (spider dùng QuochoiHdndMixin + hdnd_crawl_support.apply_hdnd_fast)
+HDND_FAST = False

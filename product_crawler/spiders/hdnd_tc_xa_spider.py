@@ -18,6 +18,13 @@ import re
 from urllib.parse import urljoin
 import scrapy
 from product_crawler.items import CandidateItem
+from product_crawler.hdnd_crawl_support import (
+    QuochoiHdndMixin,
+    build_raw_data_meta,
+    list_snapshot_from_xa_row,
+    merge_list_into_item_fields,
+    sanitize_parsed_detail,
+)
 
 try:
     from product_crawler.config import (
@@ -59,17 +66,17 @@ except ImportError:
 CHI_TIET_HREF = "chi-tiet-danh-sach-trung-cu-hdnd-cap-xa"
 
 
-class HdndTcXaSpider(scrapy.Spider):
+class HdndTcXaSpider(QuochoiHdndMixin, scrapy.Spider):
     name = "hdnd_tc_xa"
     allowed_domains = ["hoidongbaucu.quochoi.vn"]
 
     custom_settings = {
-        "DOWNLOAD_DELAY": 0.3,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 8,
-        "CONCURRENT_REQUESTS": 16,
-        "AUTOTHROTTLE_TARGET_CONCURRENCY": 6.0,
-        "AUTOTHROTTLE_START_DELAY": 0.3,
-        "AUTOTHROTTLE_MAX_DELAY": 2.0,
+        "DOWNLOAD_DELAY": 0.22,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 12,
+        "CONCURRENT_REQUESTS": 24,
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": 8.0,
+        "AUTOTHROTTLE_START_DELAY": 0.2,
+        "AUTOTHROTTLE_MAX_DELAY": 1.8,
         "RANDOMIZE_DOWNLOAD_DELAY": True,
         "WARN_ON_GENERATOR_RETURN_VALUE": False,
         "JSON_OUTPUT_FILE": "output/hdnd_tc_xa_candidates.json",
@@ -196,6 +203,10 @@ class HdndTcXaSpider(scrapy.Spider):
                 headers={"Referer": REFERER_URL},
             )
 
+        if page_num > 1 and count == 0:
+            self.logger.info("[%s] Hết danh sách xã (trang %s)", province, page_num)
+            return
+
         if seen_urls and count >= 5 and (not limit_xa or count < limit_xa):
             next_url = (
                 f"{BASE_URL}{self.LIST_XA_API}"
@@ -258,7 +269,7 @@ class HdndTcXaSpider(scrapy.Spider):
         xa_id = response.meta.get("xa_phuong_id", "")
         page_num = response.meta.get("page_number", 1)
         collected = set(response.meta.get("collected_uuids") or [])
-        total_from_page = response.meta.get("total_candidates")
+        list_by_uuid = dict(response.meta.get("list_by_uuid") or {})
 
         if "document.cookie" in body and "D1N=" in body:
             m = re.search(r"D1N=([a-f0-9]+)", body)
@@ -287,11 +298,22 @@ class HdndTcXaSpider(scrapy.Spider):
             explicit_total = int(total_m.group(1)) if total_m else None
 
         rows = response.css("tr.card-dai-bieu")
+        full_threshold = response.meta.get("full_threshold")
+        if full_threshold is None and page_num == 1 and len(rows) > 0:
+            full_threshold = max(len(rows), 15)
+        elif full_threshold is None:
+            full_threshold = 20
+
         prev_count = len(collected)
         for row in rows:
             uuid = row.xpath("@data-id").get()
-            if uuid and len(uuid) == 36:
-                collected.add(uuid)
+            if not (uuid and len(uuid) == 36):
+                continue
+            collected.add(uuid)
+            snap = list_snapshot_from_xa_row(row)
+            snap["commune_url"] = response.meta.get("commune_url") or ""
+            snap["xa_phuong_id"] = xa_id
+            list_by_uuid[uuid] = snap
 
         limit_candidate = getattr(self, "limit_candidate", None)
         try:
@@ -299,7 +321,6 @@ class HdndTcXaSpider(scrapy.Spider):
         except (ValueError, TypeError):
             limit_candidate = None
 
-        page_size = 20
         got_new = len(collected) > prev_count
         lim = limit_candidate if limit_candidate is not None else 999999
         if explicit_total is not None:
@@ -311,7 +332,7 @@ class HdndTcXaSpider(scrapy.Spider):
         else:
             need_next = (
                 got_new
-                and len(rows) >= page_size
+                and len(rows) >= full_threshold
                 and len(collected) < lim
             )
 
@@ -333,6 +354,9 @@ class HdndTcXaSpider(scrapy.Spider):
                     "page_number": next_page,
                     "collected_uuids": collected,
                     "explicit_total": explicit_total,
+                    "full_threshold": full_threshold,
+                    "list_by_uuid": list_by_uuid,
+                    "commune_url": response.meta.get("commune_url"),
                 },
                 headers={"Referer": REFERER_URL},
             )
@@ -350,6 +374,9 @@ class HdndTcXaSpider(scrapy.Spider):
                     "province": province,
                     "constituency": constituency,
                     "khoa": khoa,
+                    "commune_url": response.meta.get("commune_url"),
+                    "xa_phuong_id": xa_id,
+                    "list_snapshot": list_by_uuid.get(uuid),
                 },
                 headers={"Referer": REFERER_URL},
             )
@@ -466,31 +493,36 @@ class HdndTcXaSpider(scrapy.Spider):
             if m:
                 data["birthdate"] = m.group(1)
 
-        yield CandidateItem(
-            name=name,
-            province=province,
-            party="",
-            constituency=constituency,
-            description=data.get("position", ""),
-            detail_url=response.url,
-            candidate_id="",
-            candidate_uuid=candidate_uuid,
-            position=data.get("position", ""),
-            birthdate=data.get("birthdate", ""),
-            hometown=data.get("hometown", ""),
-            gender=data.get("gender", ""),
-            nationality=data.get("nationality", ""),
-            ethnic=data.get("ethnic", ""),
-            religion=data.get("religion", ""),
-            current_address=data.get("current_address", ""),
-            education=data.get("education", ""),
-            foreign_lang=data.get("foreign_lang", ""),
-            degree=data.get("degree", ""),
-            party_theory=data.get("party_theory", ""),
-            professional=data.get("professional", ""),
-            work_place=data.get("work_place", ""),
-            party_join_date=data.get("party_join_date", ""),
-            qh_rep=data.get("qh_rep", ""),
-            hdnd_rep=data.get("hdnd_rep", ""),
-            image_url=image_url or "",
-        )
+        sanitize_parsed_detail(data)
+
+        item = {
+            "name": name,
+            "province": province,
+            "party": "",
+            "constituency": constituency,
+            "description": data.get("position", ""),
+            "detail_url": response.url,
+            "candidate_id": "",
+            "candidate_uuid": candidate_uuid,
+            "position": data.get("position", ""),
+            "birthdate": data.get("birthdate", ""),
+            "hometown": data.get("hometown", ""),
+            "gender": data.get("gender", ""),
+            "nationality": data.get("nationality", ""),
+            "ethnic": data.get("ethnic", ""),
+            "religion": data.get("religion", ""),
+            "current_address": data.get("current_address", ""),
+            "education": data.get("education", ""),
+            "foreign_lang": data.get("foreign_lang", ""),
+            "degree": data.get("degree", ""),
+            "party_theory": data.get("party_theory", ""),
+            "professional": data.get("professional", ""),
+            "work_place": data.get("work_place", ""),
+            "party_join_date": data.get("party_join_date", ""),
+            "qh_rep": data.get("qh_rep", ""),
+            "hdnd_rep": data.get("hdnd_rep", ""),
+            "image_url": image_url or "",
+        }
+        merge_list_into_item_fields(item, response.meta.get("list_snapshot"))
+        item["raw_data"] = build_raw_data_meta(response.meta, response.meta.get("list_snapshot"))
+        yield CandidateItem(**item)

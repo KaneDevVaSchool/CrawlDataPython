@@ -9,6 +9,7 @@ import re
 from urllib.parse import urljoin
 import scrapy
 from product_crawler.items import CandidateItem
+from product_crawler.hdnd_crawl_support import QuochoiHdndMixin
 
 try:
     from product_crawler.config import (
@@ -25,7 +26,7 @@ except ImportError:
     HDND_SOURCES = [{"name": "Thành phố Hồ Chí Minh", "province_id": "ddfaac97-a898-48ae-f9d7-08ddb2649d30", "khoa": 16}]
 
 
-class HdndCandidatesSpider(scrapy.Spider):
+class HdndCandidatesSpider(QuochoiHdndMixin, scrapy.Spider):
     """
     Crawl danh sách ứng cử HĐND cấp tỉnh - parse HTML table từ API.
     Nguồn cấu hình: config.HDND_SOURCES
@@ -35,8 +36,12 @@ class HdndCandidatesSpider(scrapy.Spider):
     allowed_domains = ['hoidongbaucu.quochoi.vn']
 
     custom_settings = {
-        'DOWNLOAD_DELAY': 2,
-        'CONCURRENT_REQUESTS_PER_DOMAIN': 1,
+        'DOWNLOAD_DELAY': 0.35,
+        'CONCURRENT_REQUESTS_PER_DOMAIN': 6,
+        'CONCURRENT_REQUESTS': 12,
+        'AUTOTHROTTLE_TARGET_CONCURRENCY': 4.0,
+        'AUTOTHROTTLE_START_DELAY': 0.25,
+        'RANDOMIZE_DOWNLOAD_DELAY': True,
         'JSON_OUTPUT_FILE': 'output/hdnd_candidates.json',
     }
 
