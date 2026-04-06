@@ -8,8 +8,11 @@ Luồng (song song hdnd_xa nhưng nguồn trúng cử):
 3. thong-tin-dai-bieu/{uuid} → chi tiết
 
 Chạy:
-  scrapy crawl hdnd_tc_xa
-  scrapy crawl hdnd_tc_xa -a source=0 -a limit_xa=2 -a limit_candidate=3
+  python -m scrapy crawl hdnd_tc_xa
+    → crawl **tất cả** tỉnh trong config.HDND_TC_XA_SOURCES (mặc định = mọi mục QH_SOURCES).
+  python -m scrapy crawl hdnd_tc_xa -a source=0
+    → chỉ 1 tỉnh (index trong list trên).
+  python -m scrapy crawl hdnd_tc_xa -a source="Hà Nội" -a limit_xa=2 -a limit_candidate=3
 
 MySQL: hdbc_candidates_tc_cx, hdbc_candidates_tc_cx_info
 """
@@ -86,7 +89,7 @@ class HdndTcXaSpider(QuochoiHdndMixin, scrapy.Spider):
     CHI_TIET_XA_API = "/get-chi-tiet-danh-sach-trung-cu-hdnd-cap-xa"
 
     def start_requests(self):
-        sources = HDND_TC_XA_SOURCES or []
+        sources = list(HDND_TC_XA_SOURCES or [])
         source_arg = getattr(self, "source", None)
         if source_arg is not None:
             try:
@@ -97,6 +100,32 @@ class HdndTcXaSpider(QuochoiHdndMixin, scrapy.Spider):
                 sources = [s for s in sources if name in (s.get("name") or "").lower()]
             if sources:
                 self.logger.info("Chạy 1 nguồn: %s", sources[0].get("name"))
+            else:
+                self.logger.error(
+                    "hdnd_tc_xa: -a source=%r không khớp nguồn nào (xem HDND_TC_XA_SOURCES trong config.py).",
+                    source_arg,
+                )
+                return
+
+        if not sources:
+            self.logger.error(
+                "hdnd_tc_xa: HDND_TC_XA_SOURCES rỗng — thêm tỉnh trong product_crawler/config.py (hoặc QH_SOURCES nếu dùng list mặc định)."
+            )
+            return
+
+        names = [s.get("name") or "?" for s in sources]
+        if source_arg is None:
+            preview = ", ".join(names[:10])
+            if len(names) > 10:
+                preview += f", … (+{len(names) - 10} tỉnh)"
+            self.logger.warning(
+                "hdnd_tc_xa: crawl %d tỉnh/thành (không có -a source). %s",
+                len(names),
+                preview,
+            )
+            self.logger.warning(
+                "Chỉ 1 tỉnh: python -m scrapy crawl hdnd_tc_xa -a source=0   (index trong list config)"
+            )
 
         for src in sources:
             province_name = src.get("name", "")
