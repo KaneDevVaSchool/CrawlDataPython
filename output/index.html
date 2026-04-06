@@ -3,19 +3,41 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Danh sách ứng cử HĐND cấp tỉnh</title>
+    <title>Danh sách bầu cử — HĐND / Quốc hội</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
+      :root {
+        --brand: #6e2d01;
+        --brand-dark: #4a1f00;
+        --brand-soft: #faf6f3;
+        --border: #c5c3c1;
+      }
       * {
         box-sizing: border-box;
       }
       body {
-        font-family: "Segoe UI", system-ui, sans-serif;
+        font-family: Roboto, "Segoe UI", system-ui, sans-serif;
         margin: 0;
         padding: 20px;
-        background: #f5f7fa;
+        background: var(--brand-soft);
+        color: #2d2a28;
       }
       h1 {
-        color: #1a365d;
+        color: var(--brand);
+        margin-bottom: 8px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        font-size: 1.35rem;
+      }
+      .subtitle {
+        color: #5c5652;
+        font-size: 14px;
         margin-bottom: 20px;
       }
       .toolbar {
@@ -40,7 +62,8 @@
       .table-wrap {
         background: white;
         border-radius: 8px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 2px 8px rgba(110, 45, 1, 0.08);
+        border: 1px solid var(--border);
         overflow: hidden;
       }
       table {
@@ -54,14 +77,20 @@
         border-bottom: 1px solid #e2e8f0;
       }
       th {
-        background: #2c5282;
-        color: white;
+        background: var(--brand);
+        color: #fff;
         font-weight: 600;
         position: sticky;
         top: 0;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
       }
-      tr:hover {
-        background: #f7fafc;
+      tbody tr:nth-child(even) {
+        background: #f9f6f4;
+      }
+      tbody tr:hover {
+        background: #f0ebe7;
       }
       .stt {
         width: 50px;
@@ -103,7 +132,7 @@
       }
       .btn-detail {
         padding: 6px 12px;
-        background: #2c5282;
+        background: var(--brand);
         color: white;
         border: none;
         border-radius: 6px;
@@ -111,7 +140,7 @@
         font-size: 13px;
       }
       .btn-detail:hover {
-        background: #1a365d;
+        background: var(--brand-dark);
       }
       .btn-detail:disabled {
         background: #cbd5e0;
@@ -133,15 +162,15 @@
       .modal-content {
         background: white;
         border-radius: 12px;
-        max-width: 560px;
+        max-width: 640px;
         width: 100%;
         max-height: 90vh;
         overflow-y: auto;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 20px 60px rgba(110, 45, 1, 0.25);
       }
       .modal-header {
         padding: 20px;
-        background: #2c5282;
+        background: var(--brand);
         color: white;
         border-radius: 12px 12px 0 0;
         display: flex;
@@ -199,8 +228,11 @@
       }
       .detail-section-title {
         font-weight: 600;
-        color: #2c5282;
+        color: var(--brand);
         margin-bottom: 12px;
+        font-size: 15px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--border);
       }
       .pagination {
         display: flex;
@@ -218,18 +250,46 @@
         font-size: 14px;
       }
       .pagination button:hover:not(:disabled) {
-        background: #2c5282;
+        background: var(--brand);
         color: white;
-        border-color: #2c5282;
+        border-color: var(--brand);
       }
       .pagination button:disabled {
         opacity: 0.5;
         cursor: not-allowed;
       }
       .pagination button.active {
-        background: #2c5282;
+        background: var(--brand);
         color: white;
-        border-color: #2c5282;
+        border-color: var(--brand);
+      }
+      .badge-level {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: #ede8e4;
+        color: var(--brand);
+        white-space: nowrap;
+      }
+      .badge-level.tc {
+        background: #e8f4e8;
+        color: #22543d;
+      }
+      .badge-level.qh {
+        background: #e6f0ff;
+        color: #1a4480;
+      }
+      .link-official {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--brand);
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .link-official:hover {
+        text-decoration: underline;
       }
       .pagination span {
         color: #718096;
@@ -238,13 +298,25 @@
     </style>
   </head>
   <body>
-    <h1>Danh sách ứng cử HĐND</h1>
+    <h1>Danh sách bầu cử</h1>
+    <p class="subtitle">
+      Giao diện tham khảo
+      <a
+        class="link-official"
+        href="https://hoidongbaucu.quochoi.vn/"
+        target="_blank"
+        rel="noopener"
+        >Hội đồng bầu cử quốc gia ↗</a>
+      — lọc theo cấp, xem chi tiết và mở đúng trang chính thức.
+    </p>
     <div class="stats" id="stats"></div>
     <div class="toolbar">
       <select id="level">
-        <option value="">Tất cả (tỉnh + xã)</option>
-        <option value="tinh">Cấp tỉnh</option>
-        <option value="xa">Cấp xã</option>
+        <option value="">Tất cả (tỉnh + xã + QH + trúng cử xã)</option>
+        <option value="tinh">Ứng cử — HĐND cấp tỉnh</option>
+        <option value="qh">Ứng cử — Quốc hội</option>
+        <option value="xa">Ứng cử — HĐND cấp xã</option>
+        <option value="tc_xa">Trúng cử — HĐND cấp xã</option>
       </select>
       <input
         type="search"
@@ -275,13 +347,15 @@
         <thead>
           <tr>
             <th class="stt">STT</th>
+            <th style="min-width: 118px">Phân loại</th>
             <th class="name">Họ và tên</th>
             <th class="province">Tỉnh/TP</th>
             <th class="constituency">Xã/phường</th>
             <th class="position">Chức vụ tóm tắt</th>
             <th class="birthdate">Ngày sinh</th>
             <th>Quê quán</th>
-            <th style="width: 90px">Thao tác</th>
+            <th style="min-width: 100px">Trang web</th>
+            <th style="width: 90px">Chi tiết</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
@@ -296,7 +370,7 @@
     <div class="modal" id="modal">
       <div class="modal-content">
         <div class="modal-header">
-          <h2 id="modalTitle">Chi tiết ứng viên</h2>
+          <h2 id="modalTitle">Chi tiết</h2>
           <button class="modal-close" id="modalClose">&times;</button>
         </div>
         <div class="modal-body" id="modalBody"></div>
@@ -323,25 +397,47 @@
       const modalClose = document.getElementById("modalClose");
 
       function key(d) {
+        const u = d.candidate_uuid || "";
+        if (u) return "uuid:" + u;
         return ((d.name || "") + "|" + (d.birthdate || ""))
           .toLowerCase()
           .replace(/\s+/g, " ")
           .trim();
       }
 
+      function levelLabel(lvl) {
+        if (lvl === "tinh") return "Ứng cử · tỉnh";
+        if (lvl === "qh") return "Ứng cử · QH";
+        if (lvl === "xa") return "Ứng cử · xã";
+        if (lvl === "tc_xa") return "Trúng cử · xã";
+        return lvl || "—";
+      }
+
+      function badgeClass(lvl) {
+        if (lvl === "tc_xa") return "badge-level tc";
+        if (lvl === "qh") return "badge-level qh";
+        return "badge-level";
+      }
+
       function render(rows, sttOffset = 0) {
         tbody.innerHTML = rows
           .map((r, i) => {
             const hasDetail = !!detailMap[key(r)] || !!r.detail_url;
+            const web =
+              r.detail_url ?
+                `<a class="link-official" href="${escapeHtml(r.detail_url)}" target="_blank" rel="noopener" title="Mở trang chính thức">quochoi.vn ↗</a>`
+              : "—";
             return `
         <tr>
           <td class="stt">${r.candidate_id || sttOffset + i + 1}</td>
+          <td><span class="${badgeClass(r.level)}">${escapeHtml(levelLabel(r.level))}</span></td>
           <td class="name">${escapeHtml(r.name)}</td>
           <td class="province">${escapeHtml(r.province)}</td>
           <td class="constituency">${escapeHtml(r.constituency)}</td>
           <td class="position">${escapeHtml(r.position || r.description)}</td>
           <td class="birthdate">${escapeHtml(r.birthdate)}</td>
           <td>${escapeHtml(r.hometown)}</td>
+          <td>${web}</td>
           <td><button class="btn-detail" data-idx="${i}" ${hasDetail ? "" : "disabled"}>Chi tiết</button></td>
         </tr>`;
           })
@@ -357,10 +453,12 @@
 
       function showDetail(row) {
         const d = detailMap[key(row)] || row;
-        modalTitle.textContent = (d.name || "Ứng viên") + " - Chi tiết";
+        const isTc = row.level === "tc_xa";
+        modalTitle.textContent =
+          (isTc ? "Đại biểu — " : "Ứng viên — ") + (d.name || "Chi tiết");
         let html = "";
         if (d.detail_url)
-          html += `<div class="detail-section"><a href="${escapeHtml(d.detail_url)}" target="_blank" rel="noopener" style="font-weight:600;color:#2c5282">Xem trang chi tiết chính thức →</a></div>`;
+          html += `<div class="detail-section"><a class="link-official" href="${escapeHtml(d.detail_url)}" target="_blank" rel="noopener">Mở trên hoidongbaucu.quochoi.vn (trang chính thức) ↗</a></div>`;
         if (d.image_url)
           html += `<img class="detail-img" src="${escapeHtml(d.image_url)}" alt="">`;
         if (
@@ -536,7 +634,9 @@
               d.education ||
               d.work_place ||
               d.image_url ||
-              d.current_address
+              d.current_address ||
+              d.candidate_uuid ||
+              d.detail_url
             )
               detailMap[key(d)] = d;
           });

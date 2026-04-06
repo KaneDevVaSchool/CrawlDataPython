@@ -84,7 +84,7 @@ class HdndXaSpider(scrapy.Spider):
 
         for src in sources:
             province_name = src.get('name', '')
-            tinh_id = src.get('tinh_thanh_id', '')
+            tinh_id = src.get('tinh_thanh_id') or src.get('province_id', '')
             khoa = src.get('khoa', KHOA)
             if not tinh_id:
                 continue

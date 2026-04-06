@@ -4,8 +4,8 @@ Chạy server để xem danh sách ứng cử HĐND tại http://localhost:5000/
 
   python serve.py
 
-Dữ liệu: MySQL (hdnd_candidates + hdnd_detail_info + hdnd_xa_candidates).
-       Nếu MySQL trống/lỗi, có thể fallback JSON.
+Dữ liệu: MySQL (hdnd_* + hdnd_qh_* + hdnd_xa_* + hdbc_candidates_tc_cx).
+       Nếu MySQL trống/lỗi, có thể fallback JSON (hdnd_xa / hdnd_tc_xa).
 """
 
 import os
@@ -31,7 +31,7 @@ def load_from_db():
                 FROM hdnd_candidates c
                 ORDER BY c.province, c.candidate_id
             """)
-            rows = cur.fetchall()
+            rows = list(cur.fetchall())  # ensure list (not tuple)
             cur.execute("SELECT * FROM hdnd_detail_info")
             details = {r['candidate_uuid']: r for r in cur.fetchall() if r.get('candidate_uuid')}
             for r in rows:
@@ -41,7 +41,33 @@ def load_from_db():
                 r['level'] = 'tinh'
         except Exception as ex:
             print(f"[serve] hdnd_candidates/detail_info: {ex} (bỏ qua nếu chỉ có cấp xã)")
-        # 2. Cấp xã: hdnd_xa_candidates + hdnd_xa_detail_info (merge chi tiết như cấp tỉnh)
+        # 2. Quốc hội: hdnd_qh_candidates + hdnd_qh_detail_info
+        qh_rows = []
+        try:
+            cur.execute("""
+                SELECT id, name, province, party, constituency, description,
+                       detail_url, candidate_id, candidate_uuid, position, birthdate, hometown
+                FROM hdnd_qh_candidates
+                ORDER BY province, candidate_id
+            """)
+            qh_rows = list(cur.fetchall())  # ensure list
+            try:
+                cur.execute("SELECT * FROM hdnd_qh_detail_info")
+                qh_details = {r['candidate_uuid']: r for r in cur.fetchall() if r.get('candidate_uuid')}
+                for r in qh_rows:
+                    d = qh_details.get(r.get('candidate_uuid'))
+                    if d:
+                        r.update({k: v for k, v in d.items() if k not in ('id', 'created_at') and v})
+            except Exception:
+                pass
+            for r in qh_rows:
+                r['level'] = 'qh'
+                rows.append(r)
+            if qh_rows:
+                print(f"[serve] Loaded {len(qh_rows)} from hdnd_qh_candidates")
+        except Exception as ex:
+            print(f"[serve] hdnd_qh_candidates error: {ex}")
+        # 3. Cấp xã: hdnd_xa_candidates + hdnd_xa_detail_info (merge chi tiết như cấp tỉnh)
         xa_rows = []
         try:
             cur.execute("""
@@ -50,7 +76,7 @@ def load_from_db():
                        degree, party_theory, professional, work_place, party_join_date, qh_rep, hdnd_rep, image_url
                 FROM hdnd_xa_candidates
             """)
-            xa_rows = cur.fetchall()
+            xa_rows = list(cur.fetchall())  # ensure list
             try:
                 cur.execute("SELECT * FROM hdnd_xa_detail_info")
                 xa_details = {r['candidate_uuid']: r for r in cur.fetchall() if r.get('candidate_uuid')}
@@ -68,6 +94,33 @@ def load_from_db():
                 print(f"[serve] Loaded {len(xa_rows)} from hdnd_xa_candidates")
         except Exception as ex:
             print(f"[serve] hdnd_xa_candidates error: {ex}")
+        # 4. Trúng cử HĐND cấp xã: hdbc_candidates_tc_cx + hdbc_candidates_tc_cx_info
+        tc_xa_rows = []
+        try:
+            cur.execute("""
+                SELECT candidate_uuid, detail_url, province, constituency, name, birthdate, position, hometown,
+                       gender, nationality, ethnic, religion, current_address, education, foreign_lang,
+                       degree, party_theory, professional, work_place, party_join_date, qh_rep, hdnd_rep, image_url
+                FROM hdbc_candidates_tc_cx
+            """)
+            tc_xa_rows = list(cur.fetchall())
+            try:
+                cur.execute("SELECT * FROM hdbc_candidates_tc_cx_info")
+                tc_details = {r['candidate_uuid']: r for r in cur.fetchall() if r.get('candidate_uuid')}
+                for r in tc_xa_rows:
+                    d = tc_details.get(r.get('candidate_uuid'))
+                    if d:
+                        r.update({k: v for k, v in d.items() if k not in ('id', 'created_at') and v})
+            except Exception:
+                pass
+            for r in tc_xa_rows:
+                r['level'] = 'tc_xa'
+                r['candidate_id'] = ''
+                rows.append(r)
+            if tc_xa_rows:
+                print(f"[serve] Loaded {len(tc_xa_rows)} from hdbc_candidates_tc_cx")
+        except Exception as ex:
+            print(f"[serve] hdbc_candidates_tc_cx error: {ex}")
         # Fallback: đọc từ JSON nếu MySQL cấp xã trống/lỗi
         json_path = os.path.join(os.path.dirname(__file__), 'output', 'hdnd_xa_candidates.json')
         if not xa_rows and os.path.exists(json_path):
@@ -82,27 +135,46 @@ def load_from_db():
                     print(f"[serve] Fallback: loaded {len(xa_fallback)} from hdnd_xa_candidates.json")
             except Exception as ex:
                 print(f"[serve] JSON fallback error: {ex}")
+        json_tc = os.path.join(os.path.dirname(__file__), 'output', 'hdnd_tc_xa_candidates.json')
+        if not tc_xa_rows and os.path.exists(json_tc):
+            try:
+                with open(json_tc, 'r', encoding='utf-8') as f:
+                    tc_fallback = json.load(f)
+                if isinstance(tc_fallback, list) and tc_fallback:
+                    for r in tc_fallback:
+                        r['level'] = 'tc_xa'
+                        r['candidate_id'] = r.get('candidate_id', '')
+                        rows.append(r)
+                    print(f"[serve] Fallback: loaded {len(tc_fallback)} from hdnd_tc_xa_candidates.json")
+            except Exception as ex:
+                print(f"[serve] JSON tc_xa fallback error: {ex}")
         cur.close()
         conn.close()
+        rows = list(rows)  # ensure list before sort
         rows.sort(key=lambda x: ((x.get('province') or ''), (x.get('constituency') or ''), (x.get('name') or '')))
         return rows
     except Exception as e:
         print(f"[serve] MySQL: {e}")
         # Fallback: nếu MySQL lỗi hoàn toàn, thử đọc JSON
-        json_path = os.path.join(os.path.dirname(__file__), 'output', 'hdnd_xa_candidates.json')
-        if os.path.exists(json_path):
-            try:
-                with open(json_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                if isinstance(data, list) and data:
-                    for r in data:
-                        r['level'] = 'xa'
-                        r['candidate_id'] = r.get('candidate_id', '')
-                    data.sort(key=lambda x: ((x.get('province') or ''), (x.get('constituency') or ''), (x.get('name') or '')))
-                    print(f"[serve] Fallback JSON: loaded {len(data)} candidates (MySQL unavailable)")
-                    return data
-            except Exception as ex:
-                print(f"[serve] JSON fallback: {ex}")
+        out_dir = os.path.join(os.path.dirname(__file__), 'output')
+        merged = []
+        for fname, lvl in (('hdnd_xa_candidates.json', 'xa'), ('hdnd_tc_xa_candidates.json', 'tc_xa')):
+            jpath = os.path.join(out_dir, fname)
+            if os.path.exists(jpath):
+                try:
+                    with open(jpath, 'r', encoding='utf-8') as f:
+                        chunk = json.load(f)
+                    if isinstance(chunk, list):
+                        for r in chunk:
+                            r['level'] = lvl
+                            r['candidate_id'] = r.get('candidate_id', '')
+                        merged.extend(chunk)
+                except Exception as ex:
+                    print(f"[serve] JSON {fname}: {ex}")
+        if merged:
+            merged.sort(key=lambda x: ((x.get('province') or ''), (x.get('constituency') or ''), (x.get('name') or '')))
+            print(f"[serve] Fallback JSON: loaded {len(merged)} records (MySQL unavailable)")
+            return merged
         return None
 
 

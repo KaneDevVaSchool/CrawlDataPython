@@ -66,7 +66,9 @@ ITEM_PIPELINES = {
     'product_crawler.pipelines.DetailUrlsFilePipeline': 350,
     'product_crawler.pipelines.MySQLPipeline': 400,
     'product_crawler.pipelines.CandidateMySQLPipeline': 500,
+    'product_crawler.pipelines.HdndQhMySQLPipeline': 505,
     'product_crawler.pipelines.HdndXaMySQLPipeline': 510,
+    'product_crawler.pipelines.HdbcTcCxMySQLPipeline': 515,
 }
 
 # =============================================================================
